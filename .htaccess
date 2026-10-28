@@ -1,0 +1,11 @@
+# For Apache / XAMPP / cPanel hosting
+Options -Indexes
+<FilesMatch "\.(sqlite|sqlite-wal|sqlite-shm|db|log|bat|sh)$">
+    Require all denied
+</FilesMatch>
+<FilesMatch "^router\.php$">
+    Require all denied
+</FilesMatch>
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+</IfModule>

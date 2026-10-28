@@ -1,0 +1,13 @@
+{
+  "name": "Smart Farmer",
+  "short_name": "SmartFarmer",
+  "description": "Farm records and direct chat with your extension officer — works offline.",
+  "start_url": "./index.php",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f3ea",
+  "theme_color": "#1f6b3a",
+  "icons": [
+    { "src": "assets/img/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
