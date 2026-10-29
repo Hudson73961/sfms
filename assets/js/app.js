@@ -9,7 +9,7 @@
   const on = (n, fn) => document.addEventListener(n, e => fn(e.detail));
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage full/blocked */ } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
     del(k) { try { localStorage.removeItem(k); } catch { } }
   };
   const uid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
@@ -62,7 +62,11 @@
     mine() { return this.all().filter(i => i.owner === UID); },
     add(type, payload) {
       const item = { uid: uid(), type, payload, owner: UID, ts: Date.now() };
-      const a = this.all(); a.push(item); store.set(OKEY, a);
+      const a = this.all(); a.push(item);
+      if (!store.set(OKEY, a)) {
+        toast('Could not save this change on the device. Free storage space and try again.', 'error', 7000);
+        return null;
+      }
       emit('sf:outbox'); paintNet(); this.flush();
       return item;
     },
@@ -80,12 +84,13 @@
         });
         if (!r.ok) throw Object.assign(new Error('http'), { status: r.status });
         const data = await r.json();
-        const done = (data.results || []).map(x => x.uid);
+        const results = Array.isArray(data.results) ? data.results : [];
+        const done = results.filter(x => x.ok).map(x => x.uid);
         this.remove(done);
-        data.results.filter(x => !x.ok).forEach(x => toast('⚠️ ' + (x.error || 'Could not save one item.'), 'error', 6000));
+        results.filter(x => !x.ok).forEach(x => toast('⚠️ ' + (x.error || 'Could not save one item. The item remains queued.'), 'error', 6000));
         setOnline(true);
-        emit('sf:synced', { results: data.results });
-        if (data.results.some(x => x.ok) && !this.mine().length) toast('✅ All changes saved', 'success');
+        emit('sf:synced', { results });
+        if (results.some(x => x.ok) && !this.mine().length) toast('✅ All changes saved', 'success');
       } catch (e) {
         if (e.status === 401 || e.status === 419) toast('Please sign in again to save your offline changes.', 'error', 7000);
         else if (!e.status) setOnline(false);

@@ -136,7 +136,7 @@ function require_login(?string $role = null, bool $json = false): array {
     $u = current_user();
     if (!$u) {
         if ($json) json_out(['error' => 'Please sign in again.'], 401);
-        redirect('login.php');
+        redirect($role && in_array($role, ['admin', 'farmer'], true) ? 'login.php?role=' . $role : 'login.php');
     }
     if ($role && $u['role'] !== $role) {
         if ($json) json_out(['error' => 'Not allowed.'], 403);

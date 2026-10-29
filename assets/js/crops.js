@@ -80,11 +80,11 @@
     if (!name) { SF.toast('Please type the crop name.', 'error'); return; }
     const plant = $('planting_date').value, harv = $('harvest_date').value;
     if (plant && harv && harv < plant) { SF.toast('Harvest date must be after the planting date.', 'error'); return; }
-    outbox.add('crop_add', {
+    if (!outbox.add('crop_add', {
       crop_name: name, field_name: $('field_name').value.trim(), area_acres: $('area_acres').value,
       planting_date: plant, harvest_date: harv, expected_yield_kg: $('expected_yield_kg').value,
       status: $('status').value, notes: $('notes').value.trim()
-    });
+    })) return;
     form.reset(); $('other-wrap').hidden = true; closeForm();
     SF.toast(SF.isOnline() ? '🌱 Crop saved' : '🌱 Saved on this phone — will sync when online', 'success');
     render();

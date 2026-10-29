@@ -86,6 +86,7 @@ function migrate(PDO $p): void {
     CREATE TABLE IF NOT EXISTS farm_records(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        client_uid TEXT,
         record_type TEXT NOT NULL CHECK(record_type IN ('livestock','activity','harvest','finance','market','weather','task','inventory')),
         title TEXT NOT NULL,
         details TEXT,
@@ -112,6 +113,11 @@ function migrate(PDO $p): void {
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     ");
+    $farmRecordColumns = array_column($p->query('PRAGMA table_info(farm_records)')->fetchAll(), 'name');
+    if (!in_array('client_uid', $farmRecordColumns, true)) {
+        $p->exec('ALTER TABLE farm_records ADD COLUMN client_uid TEXT');
+    }
+    $p->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_farm_records_client_uid ON farm_records(client_uid)');
 }
 
 function migrate_default_admin_login(PDO $p): void {

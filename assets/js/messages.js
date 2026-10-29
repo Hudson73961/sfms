@@ -124,7 +124,7 @@
     e.preventDefault();
     const text = input.value.trim();
     if (!text || !farmerId) return;
-    outbox.add('message', { farmer_id: farmerId, body: text });
+    if (!outbox.add('message', { farmer_id: farmerId, body: text })) return;
     input.value = ''; autosize(); render(true); input.focus();
   });
 

@@ -4,7 +4,7 @@ A complete farm management web app built with **HTML, CSS, PHP and JavaScript** 
 
 * **Farmers** register, record crops and farm details, manage livestock, harvests, activities, finance, and inventory, update their profile photo, read farm news, get help, and chat with the administrator.
 * **Administrator** manages farmers, reviews submitted farm records, answers messages, posts announcements, and exports reports.
-* **Works offline** — crop and message changes can queue on the device and sync when connected. Other farm-record forms require a live connection.
+* **Works offline** — crop, message, and new farm-record entries can queue on the device and sync when connected. Failed syncs remain queued for retry; queued farm records can be cancelled.
 * **Works on any network** — same Wi-Fi, mobile data, or anywhere in the world (see step 3).
 
 ---
@@ -33,6 +33,8 @@ A complete farm management web app built with **HTML, CSS, PHP and JavaScript** 
 | Farmer | Register using the farmer sign-in portal | Choose your own password |
 
 For a new database, set `SMARTFARMER_ADMIN_EMAIL` (optional) and `SMARTFARMER_ADMIN_PASSWORD` in the server process environment before first start. On Windows PowerShell, you can enter the password without echoing it and run the server in the same terminal:
+
+The administrator sign-in is available at `http://localhost:8000/admin/login.php`. Existing database accounts and passwords are preserved; changing the environment password does not reset an existing administrator account.
 
 ```powershell
 $env:SMARTFARMER_ADMIN_EMAIL = 'admin@smartfarmer.local'
@@ -68,8 +70,8 @@ It prints a link like `https://something.trycloudflare.com` – share that with 
 ## 4. How offline mode works
 
 * Pages you have opened once are saved on the phone, so they open without internet.
-* Crops and messages created offline are stored on the phone and show a ⏳ "waiting to sync" label. When the connection returns they are sent automatically (duplicates are impossible – each item has a unique ID). Farm-profile and other farm-record forms require a live connection.
-* **Important:** browsers only allow offline page caching on **https** or **localhost**. On a plain `http://192.168…` address the app still queues new crops/messages while the page is open, but reloading the page offline will not work. Use option 3A/3B (https) for full offline use, then tap *Install* on the Profile page to add it to the home screen.
+* Crops, messages, and new farm records created offline are stored on the phone and show a ⏳ "waiting to sync" label. When the connection returns they are sent automatically (duplicate records are prevented with a unique client ID). Farm-profile edits and edits/deletions of existing records require a live connection.
+* **Important:** browsers only allow offline page caching on **https** or **localhost**. On a plain `http://192.168…` address the app still queues new crops, messages, and farm records while the page is open, but reloading the page offline will not work. Use option 3A/3B (https) for full offline use, then tap *Install* on the Profile page to add it to the home screen.
 
 ## 5. Security features
 
@@ -83,7 +85,7 @@ It prints a link like `https://something.trycloudflare.com` – share that with 
 * Security headers (CSP, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy, HSTS on https)
 * Private files (database, `app/`) blocked from the web; CSV exports protected against formula injection
 * Audit log of logins, password resets, exports and admin actions (visible in *Reports*)
-* Saved offline data is cleared from the phone at logout
+* Cached pages are cleared at logout; queued changes stay on the device so unsynced entries are not lost and can be sent after the same account signs in again.
 
 ## 6. Folder guide
 

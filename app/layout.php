@@ -13,6 +13,7 @@ function nav_items(string $role): array {
         'messages'      => ['admin/messages.php', '💬', 'Messages'],
         'announcements' => ['admin/announcements.php', '📢', 'News'],
         'reports'       => ['admin/reports.php', '📄', 'Reports'],
+        'tools'         => ['admin/tools.php', '☰', 'More'],
     ] : [
         'dashboard'     => ['farmer/dashboard.php', '🏡', 'Home'],
         'farm'          => ['farmer/farm.php', '🌳', 'My Farm'],
@@ -105,7 +106,7 @@ function render_foot(array $js = []): void {
         echo '<nav class="bottom-nav" aria-label="Main navigation">';
         $mobileKeys = $u['role'] === 'farmer'
             ? ['dashboard', 'crops', 'messages', 'tools', 'profile']
-            : ['dashboard', 'farmers', 'messages', 'reports'];
+            : ['dashboard', 'farmers', 'messages', 'reports', 'tools'];
         $mobileNav = nav_items($u['role']);
         foreach ($mobileKeys as $key) {
             if (!isset($mobileNav[$key])) continue;

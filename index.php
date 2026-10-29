@@ -6,7 +6,7 @@ render_head('Welcome', '', ['public' => true]);
 ?>
 <header class="land-nav">
   <a class="brand" href="<?= e(url('')) ?>"><?= logo_svg(40) ?><span><?= e(APP_NAME) ?></span></a>
-  <div class="land-actions"><a class="btn btn-ghost" href="<?= e(url('login.php?role=farmer')) ?>">Farmer sign in</a><a class="btn" href="<?= e(url('login.php?role=admin')) ?>">Admin sign in</a></div>
+  <div class="land-actions"><a class="btn btn-ghost" href="<?= e(url('login.php?role=farmer')) ?>">Farmer sign in</a><a class="btn" href="<?= e(url('admin/login.php')) ?>">Admin sign in</a></div>
 </header>
 
 <section class="hero">
@@ -39,7 +39,7 @@ render_head('Welcome', '', ['public' => true]);
       <div class="f-ico">📊</div>
       <h3>Administrator dashboard</h3>
       <p>Manage farmer accounts, review crop activity, respond to messages and post news.</p>
-      <a class="btn btn-lg btn-block" href="<?= e(url('login.php?role=admin')) ?>">Sign in as administrator</a>
+      <a class="btn btn-lg btn-block" href="<?= e(url('admin/login.php')) ?>">Sign in as administrator</a>
       <span class="portal-register">For authorized administrator accounts</span>
     </article>
   </div>

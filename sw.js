@@ -1,12 +1,12 @@
 /* Smart Farmer service worker — lets pages open without internet.
    Data changes made offline are queued by app.js and synced later. */
-const V = 'v2';
+const V = 'v3';
 const STATIC = 'sf-static-' + V, PAGES = 'sf-pages-' + V;
 const SCOPE = self.registration.scope;
 const SCOPE_PATH = new URL(SCOPE).pathname;
 const P = p => new URL(p, SCOPE).href;
 const PRECACHE = ['offline.html', 'manifest.json', 'assets/css/style.css', 'assets/js/app.js', 'assets/js/messages.js',
-  'assets/js/crops.js', 'assets/js/logout.js', 'assets/img/icon.svg', 'assets/img/field-banner.jpg',
+  'assets/js/crops.js', 'assets/js/records.js', 'assets/js/logout.js', 'assets/img/icon.svg', 'assets/img/field-banner.jpg',
   'assets/img/market-produce.jpg', 'assets/img/livestock.jpg'].map(P);
 const NO_CACHE_PAGES = ['login.php', 'register.php', 'logout.php', 'change-password.php'];
 

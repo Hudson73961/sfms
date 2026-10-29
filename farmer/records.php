@@ -6,7 +6,7 @@ $u = require_login('farmer');
 $pdo = db();
 
 $pages = [
-    'livestock' => ['Livestock', 'livestock', '🐄', 'Record animals, herd size, health notes, and vaccination reminders.', 'Animal or flock', 'Animal type, breed, or group', true, true, false],
+    'livestock' => ['Livestock', 'livestock', '🐄', 'Keep dated animal health, treatment, vaccination, and follow-up records.', 'Animal or flock', 'e.g. Goat 3 — vaccination', true, true, false],
     'activity' => ['Farm activities', 'activities', '🛠️', 'Keep a dated record of planting, watering, spraying, weeding, and feeding.', 'Activity', 'e.g. Irrigated the east field', false, false, false],
     'harvest' => ['Harvest management', 'harvest', '🌾', 'Record harvested produce, quality notes, storage, and sale amounts.', 'Crop or produce', 'e.g. Maize harvest', true, false, true],
     'finance' => ['Farm finance', 'finance', '💰', 'Record farm income and expenses to see your running balance.', 'Income or expense', 'e.g. Fertiliser, seed, produce sale', false, false, true],
@@ -71,30 +71,11 @@ if ($config && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'status' => (string)($_POST['status'] ?? 'recorded'),
     ];
     try {
-        if ($entry['title'] === '' || slen($entry['title']) > 100) throw new InvalidArgumentException('Enter a name of up to 100 characters.');
-        if (slen($entry['details']) > 2000) throw new InvalidArgumentException('Notes are too long (maximum 2,000 characters).');
-        if (slen($entry['unit']) > 32) throw new InvalidArgumentException('Unit is too long.');
-        $quantity = $config[6] ? num_or_null($entry['quantity'], 'Quantity', 100000000) : null;
-        if ($config[6] && $entry['quantity'] !== '' && $quantity === null) throw new InvalidArgumentException('Enter a valid quantity.');
-        $amount = $config[8] ? num_or_null($entry['amount'], 'Amount', 100000000000) : null;
-        if ($config[8] && $entry['amount'] !== '' && $amount === null) throw new InvalidArgumentException('Enter a valid amount.');
-        if ($type === 'finance' && $amount === null) throw new InvalidArgumentException('Enter an amount for this income or expense.');
-        if ($type === 'market' && $amount === null) throw new InvalidArgumentException('Enter the observed market price.');
-        if (in_array($type, ['livestock', 'harvest', 'inventory'], true) && $quantity === null) throw new InvalidArgumentException('Enter a quantity.');
-        $recordDate = date_or_null($entry['record_date']);
-        $dueDate = date_or_null($entry['due_date']);
-        if (in_array($type, ['livestock', 'activity', 'harvest', 'finance', 'market', 'weather'], true) && $recordDate === null) throw new InvalidArgumentException('Choose the date for this record.');
-        if ($type === 'market' && $entry['details'] === '') throw new InvalidArgumentException('Record the market or person who provided this price.');
-        if ($type === 'task' && $dueDate === null) throw new InvalidArgumentException('Choose a due date for this task.');
-        if ($type === 'finance' && !in_array($entry['status'], ['income', 'expense'], true)) throw new InvalidArgumentException('Choose income or expense.');
-        if ($type === 'task' && !in_array($entry['status'], ['planned', 'done'], true)) throw new InvalidArgumentException('Choose a valid task status.');
-        if ($type === 'livestock' && !in_array($entry['status'], ['healthy', 'monitor'], true)) throw new InvalidArgumentException('Choose a valid animal health status.');
-        if ($type === 'inventory' && !in_array($entry['status'], ['in_stock', 'low', 'out'], true)) throw new InvalidArgumentException('Choose a valid stock status.');
-        $status = in_array($type, ['finance', 'task', 'livestock', 'inventory'], true) ? $entry['status'] : 'recorded';
+        $record = clean_farm_record($type, $entry);
 
         if ($id > 0) {
             $st = $pdo->prepare('UPDATE farm_records SET title=?,details=?,quantity=?,unit=?,amount=?,record_date=?,due_date=?,status=?,updated_at=datetime(\'now\') WHERE id=? AND user_id=? AND record_type=?');
-            $st->execute([$entry['title'], $entry['details'] ?: null, $quantity, $entry['unit'] ?: null, $amount, $recordDate, $dueDate, $status, $id, $u['id'], $type]);
+            $st->execute([$record['title'], $record['details'], $record['quantity'], $record['unit'], $record['amount'], $record['record_date'], $record['due_date'], $record['status'], $id, $u['id'], $type]);
             if (!$st->rowCount()) {
                 $check = $pdo->prepare('SELECT 1 FROM farm_records WHERE id=? AND user_id=? AND record_type=?');
                 $check->execute([$id, $u['id'], $type]);
@@ -102,11 +83,7 @@ if ($config && $_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             audit((int)$u['id'], 'farm_record_update', $type . ':' . $id);
         } else {
-            $count = $pdo->prepare('SELECT COUNT(*) FROM farm_records WHERE user_id=?');
-            $count->execute([$u['id']]);
-            if ((int)$count->fetchColumn() >= 2000) throw new RuntimeException('You have reached the farm record limit.');
-            $pdo->prepare('INSERT INTO farm_records(user_id,record_type,title,details,quantity,unit,amount,record_date,due_date,status) VALUES(?,?,?,?,?,?,?,?,?,?)')
-                ->execute([$u['id'], $type, $entry['title'], $entry['details'] ?: null, $quantity, $entry['unit'] ?: null, $amount, $recordDate, $dueDate, $status]);
+            create_farm_record((int)$u['id'], $type, $record, null);
             audit((int)$u['id'], 'farm_record_create', $type . ':' . $entry['title']);
         }
         flash('success', 'Farm record saved.');
@@ -132,7 +109,7 @@ if ($config) {
     <section class="card form-card">
       <h2><?= $edit ? 'Update record' : 'Add a record' ?></h2>
       <?php if ($err): ?><div class="alert alert-error" role="alert"><?= e($err) ?></div><?php endif; ?>
-      <form method="post">
+      <form method="post"<?= !$edit ? ' data-offline-record="' . e($type) . '"' : '' ?>>
         <?= csrf_field() ?><input type="hidden" name="action" value="save"><input type="hidden" name="id" value="<?= (int)($edit['id'] ?? 0) ?>">
         <div class="grid-2">
           <div class="field"><label for="title"><?= e($nameLabel) ?></label><input id="title" name="title" required maxlength="100" value="<?= e($edit['title'] ?? '') ?>" placeholder="<?= e($placeholder) ?>"></div>
@@ -146,10 +123,11 @@ if ($config) {
           <?php if (in_array($type, ['activity', 'harvest', 'finance', 'market', 'weather', 'livestock'], true)): ?><div class="field"><label for="record_date"><?= $type === 'weather' ? 'Observation date' : 'Record date' ?></label><input id="record_date" name="record_date" type="date" value="<?= e($edit['record_date'] ?? date('Y-m-d')) ?>" required></div><?php endif; ?>
           <?php if ($showDue): ?><div class="field"><label for="due_date"><?= $type === 'livestock' ? 'Next vaccination / health check' : 'Due date / reminder date' ?></label><input id="due_date" name="due_date" type="date" value="<?= e($edit['due_date'] ?? '') ?>"<?= $type === 'task' ? ' required' : '' ?>></div><?php endif; ?>
         </div>
-        <div class="field"><label for="details"><?= $type === 'market' ? 'Market, source, and notes' : ($type === 'weather' ? 'Location, source, and farming notes' : 'Notes / details') ?><?= $type === 'market' ? '' : ' (optional)' ?></label><textarea id="details" name="details" rows="3" maxlength="2000" placeholder="<?= $type === 'market' ? 'Record the market or person who quoted this price and the date checked.' : '' ?>"<?= $type === 'market' ? ' required' : '' ?>><?= e($edit['details'] ?? '') ?></textarea></div>
+        <div class="field"><label for="details"><?= $type === 'market' ? 'Market, source, and notes' : ($type === 'weather' ? 'Location, source, and farming notes' : ($type === 'livestock' ? 'Health / treatment notes' : 'Notes / details')) ?><?= $type === 'market' ? '' : ' (optional)' ?></label><textarea id="details" name="details" rows="3" maxlength="2000" placeholder="<?= $type === 'market' ? 'Record the market or person who quoted this price and the date checked.' : ($type === 'livestock' ? 'Symptoms, treatment, medicine, vaccination, or advice received.' : '') ?>"<?= $type === 'market' ? ' required' : '' ?>><?= e($edit['details'] ?? '') ?></textarea></div>
         <div class="form-actions"><button class="btn btn-lg" type="submit">💾 Save record</button><?php if ($edit): ?><a class="btn btn-ghost btn-lg" href="<?= e(url('farmer/records.php?type=' . $type)) ?>">Cancel</a><?php endif; ?></div>
       </form>
     </section>
+    <section id="pending-records" aria-live="polite"></section>
     <section class="card"><div class="card-head"><h2>Recent records</h2><span class="chip"><?= count($records) ?> shown</span></div>
       <?php if (!$records): ?><div class="empty"><div class="big-emoji"><?= $icon ?></div><p>No records yet. Add your first entry above.</p></div><?php endif; ?>
       <?php foreach ($records as $record): ?>
@@ -165,7 +143,7 @@ if ($config) {
         </article>
       <?php endforeach; ?>
     </section>
-    <?php render_foot(); exit;
+    <?php render_foot(['records.js']); exit;
 }
 
 if ($type === 'calendar') {
@@ -215,6 +193,12 @@ $harvest = $st->fetch();
 $st = $pdo->prepare("SELECT record_type,COUNT(*) n FROM farm_records WHERE user_id=? GROUP BY record_type");
 $st->execute([$u['id']]);
 $counts = $st->fetchAll(PDO::FETCH_KEY_PAIR);
+$st = $pdo->prepare("SELECT COALESCE(NULLIF(unit,''),'units') unit, SUM(quantity) quantity, COUNT(*) items FROM farm_records WHERE user_id=? AND record_type='inventory' GROUP BY COALESCE(NULLIF(unit,''),'units') ORDER BY unit");
+$st->execute([$u['id']]);
+$inventoryTotals = $st->fetchAll();
+$st = $pdo->prepare("SELECT COUNT(*) total, SUM(CASE WHEN status='low' THEN 1 ELSE 0 END) low, SUM(CASE WHEN status='out' THEN 1 ELSE 0 END) out_of_stock FROM farm_records WHERE user_id=? AND record_type='inventory'");
+$st->execute([$u['id']]);
+$inventoryStatus = $st->fetch();
 render_head('Farm Reports', 'reports');
 ?>
 <div class="page-head"><div><h1>📈 Farm reports</h1><p class="muted">Summaries calculated from records you have entered. Export your records for your own files.</p></div><a class="btn btn-outline" href="<?= e(url('farmer/records.php?type=reports&export=records')) ?>">⬇ Export CSV</a></div>
@@ -223,6 +207,13 @@ render_head('Farm Reports', 'reports');
   <div class="stat s-gold"><span class="s-ico">💵</span><b>KES <?= e(number_format((float)$finance['income'], 0)) ?></b><span>Recorded income</span></div>
   <div class="stat s-brown"><span class="s-ico">🧾</span><b>KES <?= e(number_format((float)$finance['expenses'], 0)) ?></b><span>Recorded expenses</span></div>
   <div class="stat s-blue"><span class="s-ico">📊</span><b>KES <?= e(number_format((float)$finance['income'] - (float)$finance['expenses'], 0)) ?></b><span>Recorded balance (income − expenses)</span></div>
+</section>
+<section class="card"><div class="card-head"><h2>📦 Inventory balance</h2><a href="<?= e(url('farmer/records.php?type=inventory')) ?>">Manage inventory →</a></div>
+  <?php if (!$inventoryStatus['total']): ?><div class="empty"><p>No inventory recorded yet.</p></div><?php else: ?>
+    <p><?= (int)$inventoryStatus['total'] ?> recorded items · <?= (int)$inventoryStatus['low'] ?> low · <?= (int)$inventoryStatus['out_of_stock'] ?> out of stock</p>
+    <?php foreach ($inventoryTotals as $item): ?><div class="row-item"><div class="row-ico">📦</div><div class="row-main"><strong><?= e(number_format((float)$item['quantity'], 2)) ?> <?= e($item['unit']) ?></strong><small><?= (int)$item['items'] ?> inventory entries</small></div></div><?php endforeach; ?>
+    <p class="muted">Balances are grouped by unit and reflect the quantities you recorded; stock movements are not inferred.</p>
+  <?php endif; ?>
 </section>
 <section class="card"><h2>Records by category</h2>
   <?php if (!$counts): ?><div class="empty"><p>Add farm records to see your summaries here.</p></div><?php endif; ?>

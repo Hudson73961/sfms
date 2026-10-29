@@ -97,6 +97,69 @@ function create_crop(int $userId, array $d, ?string $uid): array {
     return $st->fetch();
 }
 
+/* ---------------- Farm records ---------------- */
+function clean_farm_record(string $type, array $d): array {
+    $types = ['livestock', 'activity', 'harvest', 'finance', 'market', 'weather', 'task', 'inventory'];
+    if (!in_array($type, $types, true)) throw new InvalidArgumentException('Choose a valid farm record type.');
+
+    $title = trim((string)($d['title'] ?? ''));
+    $details = trim((string)($d['details'] ?? ''));
+    $unit = trim((string)($d['unit'] ?? ''));
+    $status = (string)($d['status'] ?? 'recorded');
+    if ($title === '' || slen($title) > 100) throw new InvalidArgumentException('Enter a name of up to 100 characters.');
+    if (slen($details) > 2000) throw new InvalidArgumentException('Notes are too long (maximum 2,000 characters).');
+    if (slen($unit) > 32) throw new InvalidArgumentException('Unit is too long.');
+
+    $showQuantity = in_array($type, ['livestock', 'harvest', 'inventory'], true);
+    $showAmount = in_array($type, ['finance', 'market'], true);
+    $quantity = $showQuantity ? num_or_null($d['quantity'] ?? '', 'Quantity', 100000000) : null;
+    $amount = $showAmount ? num_or_null($d['amount'] ?? '', 'Amount', 100000000000) : null;
+    if ($showQuantity && $quantity === null) throw new InvalidArgumentException('Enter a valid quantity.');
+    if ($type === 'finance' && $amount === null) throw new InvalidArgumentException('Enter an amount for this income or expense.');
+    if ($type === 'market' && $amount === null) throw new InvalidArgumentException('Enter the observed market price.');
+
+    $recordDate = date_or_null($d['record_date'] ?? '');
+    $dueDate = date_or_null($d['due_date'] ?? '');
+    if (in_array($type, ['livestock', 'activity', 'harvest', 'finance', 'market', 'weather'], true) && $recordDate === null) {
+        throw new InvalidArgumentException('Choose the date for this record.');
+    }
+    if ($type === 'market' && $details === '') throw new InvalidArgumentException('Record the market or person who provided this price.');
+    if ($type === 'task' && $dueDate === null) throw new InvalidArgumentException('Choose a due date for this task.');
+    if ($type === 'finance' && !in_array($status, ['income', 'expense'], true)) throw new InvalidArgumentException('Choose income or expense.');
+    if ($type === 'task' && !in_array($status, ['planned', 'done'], true)) throw new InvalidArgumentException('Choose a valid task status.');
+    if ($type === 'livestock' && !in_array($status, ['healthy', 'monitor'], true)) throw new InvalidArgumentException('Choose a valid animal health status.');
+    if ($type === 'inventory' && !in_array($status, ['in_stock', 'low', 'out'], true)) throw new InvalidArgumentException('Choose a valid stock status.');
+
+    return [
+        'title' => $title,
+        'details' => $details ?: null,
+        'quantity' => $quantity,
+        'unit' => $unit ?: null,
+        'amount' => $amount,
+        'record_date' => $recordDate,
+        'due_date' => $dueDate,
+        'status' => in_array($type, ['finance', 'task', 'livestock', 'inventory'], true) ? $status : 'recorded',
+    ];
+}
+
+function create_farm_record(int $userId, string $type, array $data, ?string $uid): array {
+    $pdo = db();
+    if ($uid !== null) {
+        $st = $pdo->prepare('SELECT * FROM farm_records WHERE client_uid=? AND user_id=?');
+        $st->execute([$uid, $userId]);
+        if ($row = $st->fetch()) return $row;
+    }
+    $record = clean_farm_record($type, $data);
+    $st = $pdo->prepare('SELECT COUNT(*) FROM farm_records WHERE user_id=?');
+    $st->execute([$userId]);
+    if ((int)$st->fetchColumn() >= 2000) throw new RuntimeException('You have reached the farm record limit.');
+    $pdo->prepare('INSERT INTO farm_records(user_id,client_uid,record_type,title,details,quantity,unit,amount,record_date,due_date,status) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
+        ->execute([$userId, $uid, $type, $record['title'], $record['details'], $record['quantity'], $record['unit'], $record['amount'], $record['record_date'], $record['due_date'], $record['status']]);
+    $st = $pdo->prepare('SELECT * FROM farm_records WHERE id=?');
+    $st->execute([$pdo->lastInsertId()]);
+    return $st->fetch();
+}
+
 /* ---------------- Offline sync: one queued action ---------------- */
 function process_sync_item(array $user, array $it): array {
     $uid  = $it['uid'] ?? null;
@@ -112,6 +175,11 @@ function process_sync_item(array $user, array $it): array {
             case 'crop_add':
                 if (!$isFarmer) throw new RuntimeException('Only farmers can add crops.');
                 return ['uid' => $uid, 'type' => $type, 'ok' => true, 'data' => crop_out(create_crop((int)$user['id'], $p, $uid))];
+            case 'farm_record_add':
+                if (!$isFarmer) throw new RuntimeException('Only farmers can add farm records.');
+                $recordType = (string)($p['record_type'] ?? '');
+                $record = create_farm_record((int)$user['id'], $recordType, $p, $uid);
+                return ['uid' => $uid, 'type' => $type, 'ok' => true, 'data' => ['id' => (int)$record['id'], 'record_type' => $record['record_type']]];
             case 'crop_status':
                 if (!$isFarmer) throw new RuntimeException('Only farmers can edit crops.');
                 if (!in_array($p['status'] ?? '', CROP_STATUS, true)) throw new InvalidArgumentException('Invalid status.');
